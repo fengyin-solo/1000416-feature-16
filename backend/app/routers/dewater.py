@@ -19,15 +19,43 @@ STATUSES = ["待开机", "运行中", "已停机", "故障停机"]
 @router.get("", response_model=PageResult[dict])
 def list_entries(
     keyword: str | None = Query(default=None, description="按记录编号检索"),
+    machine: str | None = Query(default=None, description="按脱水机编号检索"),
     status: str | None = Query(default=None, description="待开机、运行中、已停机、故障停机"),
     page: int = 1,
     size: int = 20,
 ) -> PageResult[dict]:
-    """按记录编号与状态过滤脱水运行列表；没有数据时返回空页，不报错。"""
+    """按记录编号、脱水机编号与状态过滤脱水运行列表；没有数据时返回空页，不报错。"""
     if size > 200:
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
-    items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
+    items, total = service.list_entries(keyword=keyword, machine=machine, status=status, page=page, size=size)
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+@router.get("/stats")
+def dewater_stats(
+    keyword: str | None = Query(default=None, description="按记录编号检索"),
+    machine: str | None = Query(default=None, description="按脱水机编号检索"),
+    status: str | None = Query(default=None, description="待开机、运行中、已停机、故障停机"),
+) -> dict[str, Any]:
+    """按脱水机编号汇总运行时序与故障停机；筛选口径与脱水记录列表一致。"""
+    return service.machine_stats(keyword=keyword, machine=machine, status=status)
+
+
+@router.get("/anomalies")
+def dewater_anomalies(
+    keyword: str | None = Query(default=None, description="按记录编号检索"),
+    machine: str | None = Query(default=None, description="按脱水机编号检索"),
+    status: str | None = Query(default=None, description="待开机、运行中、已停机、故障停机"),
+) -> dict[str, Any]:
+    """定位进泥量异常、出泥含水率偏高的记录，按登记时间升序返回；无结果时返回空列表。"""
+    return service.list_anomalies(keyword=keyword, machine=machine, status=status)
+
+
+@router.get("/export")
+def export_entries() -> dict[str, Any]:
+    """导出脱水运行清单：返回当前过滤条件下的全量数据。"""
+    items, total = service.list_entries(page=1, size=10000)
+    return {"module": "dewater", "total": total, "items": items}
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -56,10 +84,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出脱水运行清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "dewater", "total": total, "items": items}
