@@ -106,12 +106,13 @@ class DewaterEntry(BaseModel):
 
     field_0: str | None = None  # 记录编号
     field_1: str | None = None  # 脱水机编号
-    field_2: str | None = None  # 进泥量
-    field_3: str | None = None  # 出泥含水率
-    field_4: str | None = None  # 絮凝剂用量
-    field_5: str | None = None  # 运行时长
-    field_6: str | None = None  # 操作人员
-    field_7: str | None = None  # 运行状态
+    field_2: str | None = None  # 运行时间
+    field_3: str | None = None  # 进泥量
+    field_4: str | None = None  # 出泥含水率
+    field_5: str | None = None  # 絮凝剂用量
+    field_6: str | None = None  # 运行时长
+    field_7: str | None = None  # 操作人员
+    field_8: str | None = None  # 运行状态
 
 class PumpEntry(BaseModel):
     """泵站明细结构。"""

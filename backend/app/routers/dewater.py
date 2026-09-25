@@ -12,7 +12,7 @@ router = APIRouter(prefix="/api/dewater", tags=["脱水运行"])
 
 service = DewaterService()
 
-LIST_FIELDS = ["记录编号", "脱水机编号", "进泥量", "出泥含水率", "絮凝剂用量", "运行时长", "操作人员", "运行状态"]
+LIST_FIELDS = ["记录编号", "脱水机编号", "运行时间", "进泥量", "出泥含水率", "絮凝剂用量", "运行时长", "操作人员", "运行状态", "异常类型"]
 STATUSES = ["待开机", "运行中", "已停机", "故障停机"]
 
 
@@ -20,14 +20,77 @@ STATUSES = ["待开机", "运行中", "已停机", "故障停机"]
 def list_entries(
     keyword: str | None = Query(default=None, description="按记录编号检索"),
     status: str | None = Query(default=None, description="待开机、运行中、已停机、故障停机"),
+    machine: str | None = Query(default=None, description="按脱水机编号检索"),
+    abnormal: str | None = Query(default=None, description="abnormal、feed、moisture，也兼容中文异常名称"),
+    start_time: str | None = Query(default=None, description="运行时间起，格式 YYYY-MM-DD 或完整时间"),
+    end_time: str | None = Query(default=None, description="运行时间止，格式 YYYY-MM-DD 或完整时间"),
     page: int = 1,
     size: int = 20,
 ) -> PageResult[dict]:
-    """按记录编号与状态过滤脱水运行列表；没有数据时返回空页，不报错。"""
+    """按记录编号、设备、异常与运行时间过滤脱水列表；没有数据时返回空页，不报错。"""
+    page = max(page, 1)
+    size = max(size, 1)
     if size > 200:
         raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
-    items, total = service.list_entries(keyword=keyword, status=status, page=page, size=size)
+    items, total = service.list_entries(
+        keyword=keyword,
+        status=status,
+        machine=machine,
+        abnormal=abnormal,
+        start_time=start_time,
+        end_time=end_time,
+        page=page,
+        size=size,
+    )
     return PageResult(items=items, total=total, page=page, size=size)
+
+
+@router.get("/statistics")
+def machine_statistics(
+    keyword: str | None = Query(default=None, description="按记录编号检索"),
+    status: str | None = Query(default=None, description="待开机、运行中、已停机、故障停机"),
+    machine: str | None = Query(default=None, description="按脱水机编号检索"),
+    abnormal: str | None = Query(default=None, description="abnormal、feed、moisture，也兼容中文异常名称"),
+    start_time: str | None = Query(default=None, description="运行时间起"),
+    end_time: str | None = Query(default=None, description="运行时间止"),
+    page_size: int = 20,
+) -> dict[str, Any]:
+    """统计口径与脱水记录列表一致，返回按脱水机编号分组的时序和故障停机数据。"""
+    page_size = max(page_size, 1)
+    if page_size > 200:
+        raise HTTPException(status_code=400, detail="每页最多 200 条，请缩小分页范围")
+    return service.machine_statistics(
+        keyword=keyword,
+        status=status,
+        machine=machine,
+        abnormal=abnormal,
+        start_time=start_time,
+        end_time=end_time,
+        page_size=page_size,
+    )
+
+
+@router.get("/export")
+def export_entries(
+    keyword: str | None = None,
+    status: str | None = None,
+    machine: str | None = None,
+    abnormal: str | None = None,
+    start_time: str | None = None,
+    end_time: str | None = None,
+) -> dict[str, Any]:
+    """导出脱水运行清单：返回当前筛选条件下的全量数据。"""
+    items, total = service.list_entries(
+        keyword=keyword,
+        status=status,
+        machine=machine,
+        abnormal=abnormal,
+        start_time=start_time,
+        end_time=end_time,
+        page=1,
+        size=10000,
+    )
+    return {"module": "dewater", "total": total, "items": items}
 
 
 @router.get("/{entry_id}", response_model=dict)
@@ -56,10 +119,3 @@ def run_action(entry_id: int, payload: EntryPayload) -> ActionResult:
     if entry is None:
         return ActionResult(ok=False, message=message)
     return ActionResult(ok=True, message=message, entry=entry)
-
-
-@router.get("/export")
-def export_entries() -> dict[str, Any]:
-    """导出脱水运行清单：返回当前过滤条件下的全量数据。"""
-    items, total = service.list_entries(page=1, size=10000)
-    return {"module": "dewater", "total": total, "items": items}
